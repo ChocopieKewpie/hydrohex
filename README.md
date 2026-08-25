@@ -18,6 +18,7 @@ The package includes:
 - First-pass least-cost depression breaching.
 - Hybrid breach/fill conditioning.
 - Deterministic analytic DEM generators plus raster-to-H3 ingestion.
+- Direct Parquet/GeoParquet and partitioned `raster2dggs` dataset ingestion.
 - USGS 3DEP fetch + real-terrain regression workflow.
 - QGIS-ready GeoPackage export, including cell polygons, cell centres, flow vectors and accumulation fields.
 - A unified `hydrohex` CLI and an end-to-end self-test.
@@ -67,6 +68,24 @@ hydrohex self-test      Exercise the local toolbox on a small H3 DEM
 
 Use `hydrohex <command> --help` for all options.
 
+### Direct `raster2dggs` → HydroHex workflow
+
+HydroHex can read `raster2dggs` output directly; no GeoPackage conversion is required. `raster2dggs` writes Hive-partitioned Apache Parquet datasets, and HydroHex automatically selects the finest `h3_XX` cell-ID column and the scalar `band_1` elevation column when present. Geometry and lower-resolution parent partition columns are ignored.
+
+For a DEM such as `Taranaki.tiff`:
+
+```powershell
+raster2dggs h3 Taranaki.tiff Taranaki_h3 --resolution 13 --sample bilinear --band 1 --nodata omit --decimals none --cell-id string --geo polygon --compression zstd --processes 8
+```
+
+Then route and accumulate the partitioned Parquet directory directly:
+
+```powershell
+hydrohex pipeline Taranaki_h3 Taranaki_flow.gpkg --method both --condition fill --workers 8
+```
+
+A single `.parquet`, `.pq`, or `.geoparquet` file is also accepted. If a Parquet dataset contains multiple numeric value bands, select the DEM explicitly with `--elevation-field`; similarly, `--id-field` overrides H3-ID autodetection. `raster2dggs --cell-id uint64` is supported and is converted back to canonical H3 hexadecimal strings on ingest. For flow routing, avoid `--compact` because HydroHex expects one uniform H3 resolution.
+
 ### Generate the default QGIS benchmark
 
 ```bash
@@ -115,7 +134,7 @@ Example screenshot asset now included in the repository:
 
 ### Run only flow direction + accumulation
 
-Input may be a CSV (`h3_cell`/`h3_id` + `elevation_m`) or a GeoPackage `cells` layer.
+Input may be CSV, a GeoPackage `cells` layer, a single Parquet/GeoParquet file, or a partitioned Parquet dataset directory such as `raster2dggs` output.
 
 ```bash
 hydrohex route input.gpkg routed.gpkg --method both --workers 8

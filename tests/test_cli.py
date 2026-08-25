@@ -44,3 +44,11 @@ def test_import_raster_defaults_to_h3_res13():
     parser = build_parser()
     args = parser.parse_args(["import-raster", "dem.tif", "dem.gpkg"])
     assert args.resolution == 13
+
+
+def test_pipeline_parser_accepts_partitioned_parquet_directory_and_autodetects_fields():
+    parser = build_parser()
+    args = parser.parse_args(["pipeline", "Taranaki_h3", "flow.gpkg", "--workers", "8"])
+    assert str(args.input) == "Taranaki_h3"
+    assert args.id_field is None
+    assert args.elevation_field is None

@@ -93,3 +93,11 @@ For the live real-terrain regression test:
 ```bash
 DGGS_FLOW_RUN_NETWORK_TESTS=1 pytest tests/test_real_dem.py -q
 ```
+
+## Parquet / raster2dggs input
+
+`preprocess`, `route`, and `pipeline` accept `.parquet`, `.pq`, `.geoparquet`, and Hive-partitioned Parquet dataset directories directly. For standard `raster2dggs h3` output, HydroHex auto-detects the finest `h3_XX` field as the routing cell ID and prefers scalar `band_1` as elevation. Use `--id-field` and `--elevation-field` to override detection.
+
+```powershell
+hydrohex pipeline Taranaki_h3 Taranaki_flow.gpkg --method both --condition fill --workers 8
+```

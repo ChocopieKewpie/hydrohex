@@ -7,11 +7,11 @@ from typing import Sequence
 
 
 def _add_input_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("input", type=Path, help="Input .csv or .gpkg H3 DEM")
+    parser.add_argument("input", type=Path, help="Input H3 DEM: .csv, .gpkg, .parquet/.pq, or partitioned Parquet directory")
     parser.add_argument("output", type=Path, help="Output .csv or .gpkg")
     parser.add_argument("--layer", default="cells", help="GeoPackage input layer")
     parser.add_argument("--id-field", default=None, help="H3 identifier field")
-    parser.add_argument("--elevation-field", default="elevation_m")
+    parser.add_argument("--elevation-field", default=None, help="Elevation column; auto-detected for Parquet, otherwise elevation_m")
 
 
 def _add_preprocess_args(parser: argparse.ArgumentParser) -> None:
