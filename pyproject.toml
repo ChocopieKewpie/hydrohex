@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hydrohex"
+version = "0.1.0"
+description = "DGGS-native terrain preprocessing, D6/D-infinity routing, weighted flow accumulation, and QGIS export, raster ingestion and real-DEM validation, starting with H3."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "HydroHex contributors"}]
+keywords = ["DGGS", "H3", "hydrology", "flow-direction", "D-infinity", "QGIS", "DEM"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = [
+  "h3>=4.1,<5",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+gis = ["geopandas>=1.0", "shapely>=2.0", "pyogrio>=0.9", "rasterio>=1.4"]
+all = ["pytest>=8", "ruff>=0.6", "geopandas>=1.0", "shapely>=2.0", "pyogrio>=0.9", "rasterio>=1.4"]
+
+[project.scripts]
+hydrohex = "hydrohex.cli:main"
+hydrohex-generate-dems = "hydrohex.datasets:main"
+hydrohex-generate-qgis = "hydrohex.qgis_datasets:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = ["network: live network regression tests"]
+
+[tool.ruff]
+line-length = 100

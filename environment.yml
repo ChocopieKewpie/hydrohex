@@ -1,0 +1,16 @@
+name: hydrohex
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - h3>=4.1,<5
+  - numpy>=1.26
+  - geopandas>=1.0
+  - shapely>=2.0
+  - pyogrio>=0.9
+  - rasterio>=1.4
+  - pytest>=8
+  - ruff>=0.6
+  - pip
+  - pip:
+      - -e .

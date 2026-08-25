@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: python -m pip install -e '.[all]'
+      - name: Lint
+        run: ruff check src tests
+      - name: Tests
+        run: pytest
+      - name: Toolbox self-test
+        run: hydrohex self-test --workers 2
+
+  real-dem-regression:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -e '.[all]'
+      - name: Live USGS 3DEP regression
+        env:
+          DGGS_FLOW_RUN_NETWORK_TESTS: "1"
+        run: pytest tests/test_real_dem.py -q
