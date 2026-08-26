@@ -66,6 +66,7 @@ def compute_flow_directions(
     *,
     workers: int = 1,
     chunksize: int = 256,
+    progress: bool = False,
 ) -> dict[Cell, FlowResult]:
     """Compute independent D6-style flow directions for all cells in a DEM.
 
@@ -76,5 +77,5 @@ def compute_flow_directions(
     func = partial(
         flow_direction, elevation=elevation, neighbors=neighbors, distance=distance
     )
-    results = map_independent(func, cells, workers=workers, chunksize=chunksize)
+    results = map_independent(func, cells, workers=workers, chunksize=chunksize, progress=progress, progress_desc="D6 routing")
     return dict(zip(cells, results))

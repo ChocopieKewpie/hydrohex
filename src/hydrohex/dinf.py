@@ -183,6 +183,7 @@ def compute_dinf_flow_directions(
     *,
     workers: int = 1,
     chunksize: int = 256,
+    progress: bool = False,
 ) -> dict[Cell, DInfFlowResult]:
     """Compute independent D-infinity-style directions for every DEM cell.
 
@@ -191,5 +192,5 @@ def compute_dinf_flow_directions(
     """
     cells = tuple(elevation)
     func = partial(dinf_flow_direction, elevation=elevation, neighbors=neighbors, xy=xy)
-    results = map_independent(func, cells, workers=workers, chunksize=chunksize)
+    results = map_independent(func, cells, workers=workers, chunksize=chunksize, progress=progress, progress_desc="D-infinity routing")
     return dict(zip(cells, results))

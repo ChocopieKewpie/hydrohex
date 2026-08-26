@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Sized
 from typing import Callable, Iterable, TypeVar
+
+from .progress import progress_iter
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -23,6 +26,8 @@ def map_independent(
     *,
     workers: int = 1,
     chunksize: int = 256,
+    progress: bool = False,
+    progress_desc: str = "Processing cells",
 ) -> list[R]:
     """Map an independent cell-local operation, preserving input order.
 
@@ -34,7 +39,10 @@ def map_independent(
     n_workers = resolve_workers(workers)
     if chunksize < 1:
         raise ValueError("chunksize must be >= 1")
+    total = len(items) if isinstance(items, Sized) else None
     if n_workers == 1:
-        return [func(item) for item in items]
+        iterator = (func(item) for item in items)
+        return list(progress_iter(iterator, total=total, desc=progress_desc, enabled=progress))
     with ThreadPoolExecutor(max_workers=n_workers, thread_name_prefix="hydrohex") as pool:
-        return list(pool.map(func, items, chunksize=chunksize))
+        iterator = pool.map(func, items, chunksize=chunksize)
+        return list(progress_iter(iterator, total=total, desc=progress_desc, enabled=progress))

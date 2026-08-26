@@ -4,6 +4,7 @@ import heapq
 from typing import Callable, Hashable, Iterable, Mapping, TypeVar
 
 from ..accumulation import boundary_cells
+from ..progress import progress_bar
 from .base import TerrainResult
 from .depressions import find_pits
 
@@ -71,6 +72,7 @@ def breach_depressions(
     min_slope: float = 1e-5,
     max_breach_depth_m: float | None = None,
     max_search_cells: int = 100_000,
+    progress: bool = False,
 ) -> TerrainResult:
     """Carve least-cost drainage paths from local pits.
 
@@ -88,43 +90,47 @@ def breach_depressions(
 
     original = {cell: float(z) for cell, z in elevation.items()}
     current = dict(original)
-    boundaries = boundary_cells(set(current), neighbors)
+    boundaries = boundary_cells(set(current), neighbors, progress=progress)
     selected = list(find_pits(current, neighbors) if pits is None else pits)
     total_carve = {cell: 0.0 for cell in current}
     breached_pits = 0
 
-    for pit in selected:
-        if pit not in current or pit in boundaries:
-            continue
-        path = _least_cost_escape_path(
-            pit, current, neighbors, boundaries, distance, max_search_cells
-        )
-        if path is None or len(path) < 2:
-            continue
+    with progress_bar(total=len(selected), desc="Breaching depressions", enabled=progress, unit="pit") as bar:
+        for pit in selected:
+            try:
+                if pit not in current or pit in boundaries:
+                    continue
+                path = _least_cost_escape_path(
+                    pit, current, neighbors, boundaries, distance, max_search_cells
+                )
+                if path is None or len(path) < 2:
+                    continue
 
-        profile: dict[Cell, float] = {pit: current[pit]}
-        cumulative = 0.0
-        prev = pit
-        for cell in path[1:]:
-            d = 1.0 if distance is None else float(distance(prev, cell))
-            cumulative += d
-            profile[cell] = current[pit] - min_slope * cumulative
-            prev = cell
+                profile: dict[Cell, float] = {pit: current[pit]}
+                cumulative = 0.0
+                prev = pit
+                for cell in path[1:]:
+                    d = 1.0 if distance is None else float(distance(prev, cell))
+                    cumulative += d
+                    profile[cell] = current[pit] - min_slope * cumulative
+                    prev = cell
 
-        depths = {cell: max(0.0, current[cell] - profile[cell]) for cell in path[1:]}
-        required_depth = max(depths.values(), default=0.0)
-        if max_breach_depth_m is not None and required_depth > max_breach_depth_m:
-            continue
+                depths = {cell: max(0.0, current[cell] - profile[cell]) for cell in path[1:]}
+                required_depth = max(depths.values(), default=0.0)
+                if max_breach_depth_m is not None and required_depth > max_breach_depth_m:
+                    continue
 
-        changed = False
-        for cell in path[1:]:
-            new_z = min(current[cell], profile[cell])
-            if new_z < current[cell]:
-                total_carve[cell] += current[cell] - new_z
-                current[cell] = new_z
-                changed = True
-        if changed:
-            breached_pits += 1
+                changed = False
+                for cell in path[1:]:
+                    new_z = min(current[cell], profile[cell])
+                    if new_z < current[cell]:
+                        total_carve[cell] += current[cell] - new_z
+                        current[cell] = new_z
+                        changed = True
+                if changed:
+                    breached_pits += 1
+            finally:
+                bar.update(1)
 
     breach_depth = {cell: max(0.0, original[cell] - current[cell]) for cell in current}
     return TerrainResult.from_elevation(

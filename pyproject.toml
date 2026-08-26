@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hydrohex"
-version = "0.1.0"
+version = "0.2.0"
 description = "DGGS-native terrain preprocessing, D6/D-infinity routing, weighted flow accumulation, and QGIS export, raster ingestion and real-DEM validation, starting with H3."
 readme = "README.md"
 requires-python = ">=3.10"

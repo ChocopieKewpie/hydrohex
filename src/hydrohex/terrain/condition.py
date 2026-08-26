@@ -22,6 +22,7 @@ def condition_dem(
     max_fill_depth_m: float = 2.0,
     max_breach_depth_m: float | None = 20.0,
     max_search_cells: int = 100_000,
+    progress: bool = False,
 ) -> TerrainResult:
     """Hydrologically condition a DEM by filling, breaching, or a hybrid strategy.
 
@@ -32,7 +33,7 @@ def condition_dem(
     method = method.lower()
     if method == "fill":
         return priority_flood_fill(
-            elevation, neighbors, distance=distance, min_slope=min_slope
+            elevation, neighbors, distance=distance, min_slope=min_slope, progress=progress
         )
     if method == "breach":
         return breach_depressions(
@@ -42,13 +43,14 @@ def condition_dem(
             min_slope=max(min_slope, 1e-12),
             max_breach_depth_m=max_breach_depth_m,
             max_search_cells=max_search_cells,
+            progress=progress,
         )
     if method != "hybrid":
         raise ValueError("method must be one of: fill, breach, hybrid")
     if max_fill_depth_m < 0.0:
         raise ValueError("max_fill_depth_m must be >= 0")
 
-    preview_fill = priority_flood_fill(elevation, neighbors, distance=distance, min_slope=0.0)
+    preview_fill = priority_flood_fill(elevation, neighbors, distance=distance, min_slope=0.0, progress=progress)
     fill_depth = preview_fill.diagnostics["fill_depth_m"]
     deep_pits = {
         pit
@@ -63,12 +65,14 @@ def condition_dem(
         min_slope=max(min_slope, 1e-12),
         max_breach_depth_m=max_breach_depth_m,
         max_search_cells=max_search_cells,
+        progress=progress,
     )
     final = priority_flood_fill(
         breached.elevation,
         neighbors,
         distance=distance,
         min_slope=min_slope,
+        progress=progress,
     )
 
     original = {cell: float(z) for cell, z in elevation.items()}

@@ -31,6 +31,8 @@ def run_usgs_real_dem_test(
     overwrite: bool = False,
     site_slug: str = "loch_vale",
     tile_size: int = 1024,
+    backend: str = "auto",
+    progress: bool = False,
 ) -> dict[str, object]:
     """Fetch a real 3DEP DEM, ingest it to H3, route it, accumulate it and export QGIS output."""
     from .io import write_dem_csv
@@ -75,6 +77,8 @@ def run_usgs_real_dem_test(
         smooth=smooth,
         condition=condition,
         workers=workers,
+        backend=backend,
+        progress=progress,
     )
     flow_gpkg = export_flow_geopackage(
         result.elevation,
@@ -105,6 +109,7 @@ def run_usgs_real_dem_test(
         "sampling": sampling,
         "condition": condition,
         "smooth": smooth,
+        "backend": result.backend,
         "cells": len(imported.elevation),
         "elevation_min_m": min(imported.elevation.values()),
         "elevation_max_m": max(imported.elevation.values()),

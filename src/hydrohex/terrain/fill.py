@@ -4,6 +4,7 @@ import heapq
 from typing import Callable, Hashable, Iterable, Mapping, TypeVar
 
 from ..accumulation import boundary_cells
+from ..progress import progress_bar
 from .base import TerrainResult
 
 Cell = TypeVar("Cell", bound=Hashable)
@@ -18,6 +19,7 @@ def priority_flood_fill(
     distance: Distance | None = None,
     outlets: Iterable[Cell] | None = None,
     min_slope: float = 0.0,
+    progress: bool = False,
 ) -> TerrainResult:
     """Fill depressions using a graph-native Priority-Flood traversal.
 
@@ -29,7 +31,7 @@ def priority_flood_fill(
         raise ValueError("min_slope must be >= 0")
     original = {cell: float(z) for cell, z in elevation.items()}
     domain = set(original)
-    seeds = set(outlets) if outlets is not None else boundary_cells(domain, neighbors)
+    seeds = set(outlets) if outlets is not None else boundary_cells(domain, neighbors, progress=progress)
     unknown = seeds.difference(domain)
     if unknown:
         raise ValueError(f"Unknown outlet cell {next(iter(unknown))!r}")
@@ -44,21 +46,24 @@ def priority_flood_fill(
         heapq.heappush(queue, (filled[cell], serial, cell))
         serial += 1
 
-    while queue:
-        spill_z, _order, cell = heapq.heappop(queue)
-        for neighbor in neighbors(cell):
-            if neighbor not in domain or neighbor in visited:
-                continue
-            visited.add(neighbor)
-            required = spill_z
-            if min_slope > 0.0:
-                d = 1.0 if distance is None else float(distance(cell, neighbor))
-                if d <= 0.0:
-                    raise ValueError("distance must be > 0 when min_slope is used")
-                required += min_slope * d
-            filled[neighbor] = max(original[neighbor], required)
-            heapq.heappush(queue, (filled[neighbor], serial, neighbor))
-            serial += 1
+    with progress_bar(total=len(domain), desc="Priority-Flood filling", enabled=progress) as bar:
+        bar.update(len(visited))
+        while queue:
+            spill_z, _order, cell = heapq.heappop(queue)
+            for neighbor in neighbors(cell):
+                if neighbor not in domain or neighbor in visited:
+                    continue
+                visited.add(neighbor)
+                required = spill_z
+                if min_slope > 0.0:
+                    d = 1.0 if distance is None else float(distance(cell, neighbor))
+                    if d <= 0.0:
+                        raise ValueError("distance must be > 0 when min_slope is used")
+                    required += min_slope * d
+                filled[neighbor] = max(original[neighbor], required)
+                heapq.heappush(queue, (filled[neighbor], serial, neighbor))
+                serial += 1
+                bar.update(1)
 
     if visited != domain:
         missing = domain.difference(visited)

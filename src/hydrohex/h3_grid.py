@@ -12,6 +12,12 @@ def neighbors(cell: str) -> list[str]:
     return [n for n in h3.grid_disk(cell, 1) if n != cell]
 
 
+def latlng(cell: str) -> tuple[float, float]:
+    """H3 cell-centre latitude/longitude."""
+    lat, lng = h3.cell_to_latlng(cell)
+    return float(lat), float(lng)
+
+
 def distance_m(cell_a: str, cell_b: str) -> float:
     """Great-circle distance between H3 cell centers in metres."""
     a = h3.cell_to_latlng(cell_a)

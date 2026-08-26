@@ -7,6 +7,7 @@ from typing import Callable, Hashable, Mapping, Sequence, TypeVar
 
 from .graph import WeightedFlowGraph
 from .parallel import resolve_workers
+from .progress import progress_bar
 
 Cell = TypeVar("Cell", bound=Hashable)
 
@@ -40,14 +41,18 @@ class AccumulationResult:
 def boundary_cells(
     cells: Mapping[Cell, object] | set[Cell] | tuple[Cell, ...] | list[Cell],
     neighbors: Callable[[Cell], list[Cell] | tuple[Cell, ...]],
+    *,
+    progress: bool = False,
 ) -> set[Cell]:
     """Return domain cells touching at least one neighbor outside the supplied domain."""
     domain = set(cells)
-    return {
-        cell
-        for cell in domain
-        if any(neighbor not in domain for neighbor in neighbors(cell))
-    }
+    out: set[Cell] = set()
+    with progress_bar(total=len(domain), desc="Finding domain boundary", enabled=progress) as bar:
+        for cell in domain:
+            if any(neighbor not in domain for neighbor in neighbors(cell)):
+                out.add(cell)
+            bar.update(1)
+    return out
 
 
 def _front_chunks(front: Sequence[Hashable], workers: int) -> list[tuple[Hashable, ...]]:
@@ -89,6 +94,8 @@ def accumulate(
     edge_contaminated_sources: set[Cell] | None = None,
     workers: int = 1,
     parallel_min_front_size: int = 256,
+    progress: bool = False,
+    progress_desc: str = "Flow accumulation",
 ) -> AccumulationResult:
     """Accumulate a weighted directed acyclic flow graph in O(V + E).
 
@@ -153,52 +160,57 @@ def accumulate(
         )
 
     try:
-        while front:
-            front_count += 1
-            max_front_width = max(max_front_width, len(front))
-            processed += len(front)
+        with progress_bar(total=len(cells), desc=progress_desc, enabled=progress) as bar:
+            while front:
+                front_count += 1
+                max_front_width = max(max_front_width, len(front))
+                processed += len(front)
 
-            use_parallel = (
-                executor is not None
-                and len(front) >= parallel_min_front_size
-                and len(front) > 1
-            )
+                use_parallel = (
+                    executor is not None
+                    and len(front) >= parallel_min_front_size
+                    and len(front) > 1
+                )
 
-            if use_parallel:
-                parallel_fronts += 1
-                chunks = _front_chunks(front, n_workers)
-                futures = [
-                    executor.submit(
-                        _process_front_chunk,
-                        chunk,
-                        graph,
-                        values,
-                        contaminated,
-                    )
-                    for chunk in chunks
-                ]
-                updates = [future.result() for future in futures]
-            else:
-                updates = [
-                    _process_front_chunk(front, graph, values, contaminated)
-                ]
-
-            next_front: list[Hashable] = []
-            for additions, contaminated_receivers, decrements in updates:
-                for receiver, addition in additions.items():
-                    values[receiver] += addition
-                for receiver in contaminated_receivers:
-                    contaminated[receiver] = True
-                for receiver, decrement in decrements.items():
-                    indegree[receiver] -= decrement
-                    if indegree[receiver] == 0:
-                        next_front.append(receiver)
-                    elif indegree[receiver] < 0:
-                        raise RuntimeError(
-                            f"Negative indegree while accumulating receiver {receiver!r}"
+                if use_parallel:
+                    parallel_fronts += 1
+                    chunks = _front_chunks(front, n_workers)
+                    futures = [
+                        executor.submit(
+                            _process_front_chunk,
+                            chunk,
+                            graph,
+                            values,
+                            contaminated,
                         )
+                        for chunk in chunks
+                    ]
+                    updates = [future.result() for future in futures]
+                else:
+                    updates = [
+                        _process_front_chunk(front, graph, values, contaminated)
+                    ]
 
-            front = next_front
+                next_front: list[Hashable] = []
+                for additions, contaminated_receivers, decrements in updates:
+                    for receiver, addition in additions.items():
+                        values[receiver] += addition
+                    for receiver in contaminated_receivers:
+                        contaminated[receiver] = True
+                    for receiver, decrement in decrements.items():
+                        indegree[receiver] -= decrement
+                        if indegree[receiver] == 0:
+                            next_front.append(receiver)
+                        elif indegree[receiver] < 0:
+                            raise RuntimeError(
+                                f"Negative indegree while accumulating receiver {receiver!r}"
+                            )
+                bar.update(len(front))
+                bar.set_postfix_str(
+                    f"front={front_count} width={len(front)} parallel={parallel_fronts}",
+                    refresh=False,
+                )
+                front = next_front
     finally:
         if executor is not None:
             executor.shutdown(wait=True)
@@ -237,6 +249,8 @@ def accumulate_flow(
     edge_contaminated_sources: set[Cell] | None = None,
     workers: int = 1,
     parallel_min_front_size: int = 256,
+    progress: bool = False,
+    progress_prefix: str = "",
 ) -> FlowAccumulation:
     """Compute equivalent contributing-cell count and physical contributing area.
 
@@ -250,6 +264,8 @@ def accumulate_flow(
             edge_contaminated_sources=edge_contaminated_sources,
             workers=workers,
             parallel_min_front_size=parallel_min_front_size,
+            progress=progress,
+            progress_desc=f"{progress_prefix} contributing cells".strip(),
         ),
         area_m2=accumulate(
             graph,
@@ -257,5 +273,7 @@ def accumulate_flow(
             edge_contaminated_sources=edge_contaminated_sources,
             workers=workers,
             parallel_min_front_size=parallel_min_front_size,
+            progress=progress,
+            progress_desc=f"{progress_prefix} contributing area".strip(),
         ),
     )

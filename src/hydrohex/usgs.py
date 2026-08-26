@@ -197,7 +197,7 @@ def _fetch_tiff_bytes(
     """Fetch one small TIFF request with retries for transient ArcGIS failures."""
     last_error: Exception | None = None
     for attempt in range(retries):
-        request = Request(url, headers={"User-Agent": "hydrohex/0.1.0 (+USGS-3DEP-test)"})
+        request = Request(url, headers={"User-Agent": "hydrohex/0.2.0 (+USGS-3DEP-test)"})
         try:
             with urlopen(request, timeout=timeout_s) as response:
                 payload = response.read()

@@ -57,6 +57,7 @@ def smooth_dem(
     elevation_sigma: float = 5.0,
     iterations: int = 1,
     workers: int = 1,
+    progress: bool = False,
 ) -> TerrainResult:
     """Smooth a DGGS DEM using mean, median, or feature-preserving bilateral filtering.
 
@@ -76,7 +77,7 @@ def smooth_dem(
     original = {cell: float(z) for cell, z in elevation.items()}
     current = dict(original)
     cells = tuple(current)
-    for _ in range(iterations):
+    for iteration in range(iterations):
         func = partial(
             _smooth_one,
             elevation=current,
@@ -86,7 +87,7 @@ def smooth_dem(
             spatial_sigma=spatial_sigma,
             elevation_sigma=elevation_sigma,
         )
-        current = dict(map_independent(func, cells, workers=workers))
+        current = dict(map_independent(func, cells, workers=workers, progress=progress, progress_desc=f"{method.capitalize()} smoothing {iteration + 1}/{iterations}"))
 
     return TerrainResult.from_elevation(
         original,

@@ -6,9 +6,11 @@
 
 A Python toolbox for **DGGS-native terrain preprocessing, flow routing and hydrologic analysis**, currently implemented for H3.
 
+**Current version:** 0.2.0
+
 The package includes:
 
-- D6 steepest-neighbor flow direction.
+- D6 steepest-neighbor flow direction, including an indexed NumPy backend.
 - A first facet-based D-infinity (D∞) adaptation for polygonal DGGS cells.
 - Weighted flow graphs shared by D6 and D∞.
 - Flow accumulation as equivalent contributing cells and physical area.
@@ -23,6 +25,7 @@ The package includes:
 - QGIS-ready GeoPackage export, including cell polygons, cell centres, flow vectors and accumulation fields.
 - A unified `hydrohex` CLI and an end-to-end self-test.
 - Shared-memory worker threads for independent cell-local operations.
+- CLI progress bars for topology, smoothing/conditioning, routing, accumulation, and export stages.
 
 The routing/conditioning algorithms use **DGGS cell IDs and topology as the authoritative data model**. Polygon, point and line geometries are derived for visualization and GIS interoperability.
 
@@ -58,12 +61,13 @@ hydrohex self-test --workers 2
 ```text
 hydrohex generate       Generate deterministic analytic H3 DEM test suites
 hydrohex fetch-dem      Download a clipped USGS 3DEP GeoTIFF
-hydrohex import-raster  Sample a raster DEM onto H3 cell centres
+hydrohex import-raster  Sample a raster DEM onto H3 cell centres (minimal implementation)
 hydrohex real-dem-test  Fetch + ingest + route + accumulate a real Loch Vale DEM
 hydrohex preprocess     Smooth and/or hydrologically condition an H3 DEM
 hydrohex route          D6/D∞ routing + accumulation without preprocessing
 hydrohex pipeline       Preprocess + route + accumulate + export
 hydrohex self-test      Exercise the local toolbox on a small H3 DEM
+hydrohex benchmark      Compare legacy Python and indexed NumPy D6 performance
 ```
 
 Use `hydrohex <command> --help` for all options.
@@ -132,6 +136,24 @@ Example screenshot asset now included in the repository:
 ![Example Loch Vale flow screenshot](docs/assets/loch_vale_flow_screenshot.png)
 
 
+### Benchmark the D6 backends
+
+HydroHex keeps the original Python D6 implementation as a reference backend and can benchmark it against the indexed NumPy implementation on the same DEM. Timed routing runs disable progress bars so UI overhead does not distort the comparison.
+
+For the Taranaki GeoPackage produced from `raster2dggs`, run:
+
+```powershell
+hydrohex benchmark Taranaki_h3.gpkg --layer cells --id-field h3_13 --elevation-field band_1 --workers 8 --repeats 3 --json Taranaki_benchmark.json --csv Taranaki_benchmark.csv
+```
+
+Without an input file, HydroHex generates a deterministic H3 benchmark surface:
+
+```powershell
+hydrohex benchmark --resolution 10 --radius 30 --workers 8 --repeats 3
+```
+
+The report separates the one-time indexed-topology construction cost from routing on a reusable topology. It also verifies that both backends choose exactly the same D6 receiver for every cell.
+
 ### Run only flow direction + accumulation
 
 Input may be CSV, a GeoPackage `cells` layer, a single Parquet/GeoParquet file, or a partitioned Parquet dataset directory such as `raster2dggs` output.
@@ -139,6 +161,8 @@ Input may be CSV, a GeoPackage `cells` layer, a single Parquet/GeoParquet file, 
 ```bash
 hydrohex route input.gpkg routed.gpkg --method both --workers 8
 ```
+
+`--backend auto` is the default. It uses the indexed NumPy D6 backend while retaining the reference D∞ implementation. Use `--backend python` for correctness/performance comparisons, or `--backend indexed` to explicitly request indexed D6. Progress bars are enabled by default; add `--no-progress` for quiet batch/CI runs.
 
 Choose one method if desired:
 
@@ -320,16 +344,20 @@ The older neutral-surface generator remains available as an optional Python util
 - Mean/median/bilateral smoothing within each iteration.
 - Flow accumulation on sufficiently wide topological fronts.
 
-Routing and smoothing use shared-memory threads for independent cell-local work. Accumulation uses a front/reduce strategy: all cells in the current dependency-ready front are read-only, workers build thread-local receiver contributions, and the main thread reduces those updates before advancing to the next front. This avoids locks/atomics on downstream accumulation values and works for both D6 and weighted D∞ graphs.
+D6 now defaults to an **indexed NumPy backend**. HydroHex builds one `N × 6` integer neighbor matrix, stores center-to-center distances in numeric arrays, and evaluates downslope slopes in NumPy chunks. For H3, each cell center is decoded once and all neighbor distances are calculated with a vectorized great-circle kernel. Independent D6 chunks can run across `--workers`. `--backend python` preserves the original per-cell implementation as a reference.
+
+D∞ and smoothing use shared-memory threads for independent cell-local work. Accumulation uses a front/reduce strategy: all cells in the current dependency-ready front are read-only, workers build thread-local receiver contributions, and the main thread reduces those updates before advancing to the next front. This avoids locks/atomics on downstream accumulation values and works for both D6 and weighted D∞ graphs.
 
 Accumulation automatically stays serial for narrow fronts (default threshold: 256 cells), where thread scheduling would cost more than it saves. `AccumulationResult.stats` reports the number of fronts, maximum front width, and how many fronts actually used workers.
+
+CLI progress bars are enabled by default for the long-running processing stages. They report cells/fronts processed and continue to work with a dependency-free terminal fallback if `tqdm` is not installed. Use `--no-progress` for quiet scripts and CI.
 
 These operations intentionally remain serial today because their traversal/order is inherently stateful in the current reference implementation:
 
 - Priority-Flood filling.
 - Sequential pit breaching.
 
-The threaded accumulator is an intermediate implementation. Pure-Python arithmetic is still constrained by interpreter overhead, so the larger performance step remains an indexed NumPy topology representation and compiled/vectorized kernels; the public `workers` interface is designed to survive that transition.
+The indexed D6 backend is the first numeric backend. D∞ facet evaluation and the weighted accumulation graph still materialize Python result/edge objects, so moving those two stages onto the same indexed arrays is the next major optimization target.
 
 ## Python API example
 
@@ -365,6 +393,8 @@ The lower-level DGGS-independent functions remain available for non-H3 adapters.
 src/hydrohex/
   cli.py              unified command-line interface
   pipeline.py         H3 preprocessing/routing/accumulation orchestration
+  indexed.py          indexed NumPy topology + D6 kernel
+  progress.py         CLI/library progress reporting
   parallel.py         shared independent-cell worker interface
   core.py             DGGS-independent D6 kernel
   dinf.py             DGGS-independent D∞ facet kernel
